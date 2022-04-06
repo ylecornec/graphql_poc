@@ -1,0 +1,9 @@
+(executables
+ (libraries
+   lib
+   graphql-cohttp
+   cohttp-lwt-unix
+   cohttp-async
+ )
+ (preprocess (pps ppx_deriving.show ppx_jane))
+ (names server client))
