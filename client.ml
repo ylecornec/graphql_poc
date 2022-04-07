@@ -39,36 +39,36 @@ module Req_set_kind = struct
      So at the moment we need to be carefull to only access fields we asked for
      (but if the field is there it will be parsed correctly).
 
-     To keep this local and close to the definition of the query:
-        - create a response struct type next to the query.
-        - (AND/OR) manually restrict the type of the [response_of_json] object next to the query as it is done here.
-
-     Maybe one solution could be to generate this [result] type using a ppx ?
-
    *)
 
-  type result = < contacts:
-                    <address: <set_kind: <name: string option; kind: Lib.Kind.t option> > > list >
+  type result_address = {name: string option; kind: Lib.Kind.t option}
+  type result = result_address list
 
-  (** We ensure that object type provided by the server must be a subtype of result. *)
-
-  let result json = (Server_schema.Gql.response_of_json json :> result )
+  let result json: result =
+    List.map ~f:(fun o ->
+        {name = o#address#set_kind#name;
+         kind = o#address#set_kind#kind}
+      )
+      ((Server_schema.Gql.response_of_json json)#contacts)
 
 end
 
 module Req_get_all = struct
   (**
-     This query makes use of the [`GetAll] constructor, which corresponds to a more complex query defined server side,
-     which enables us to parse the response of this query into a struct of type [Lib.Address.Gql.GetAll.response]
+     This query makes use of the [`GetAll] constructor, which corresponds to a more complex subquery defined server side,
+     which enables us to parse the response of this subqueries directly into a struct of type [Lib.Address.Gql.GetAll.response]
    *)
 
   let query = `Contacts [`Address [`GetAll]]
-  type result_type = < contacts:
-                         <address: <get_all: Lib.Address.Gql.GetAll.response> > list >
-  let result json = (Server_schema.Gql.response_of_json json :> result_type )
+
+  type result = Lib.Address.Gql.GetAll.response list
+
+  let result json : result =
+    List.map
+      ~f:(fun contact -> contact#address#get_all)
+      (Server_schema.Gql.response_of_json json)#contacts
 
 end
-
 
 (** Below, we evaluate the queries and print the responses *)
 
@@ -83,8 +83,8 @@ let req_get_all () =
       (Uri.of_string "http://localhost:8080/graphql")
   in
   List.iter
-    response#contacts
-    ~f:(fun contact -> Format.printf "%a\n" (Lib.Address.Gql.GetAll.pp_response) contact#address#get_all)
+    response
+    ~f:(fun contact -> Format.printf "%a\n" (Lib.Address.Gql.GetAll.pp_response) contact)
 
 let req_set_kind () = 
   let%map response =
@@ -97,8 +97,8 @@ let req_set_kind () =
       (Uri.of_string "http://localhost:8080/graphql") 
   in
   List.iter
-    response#contacts
-    ~f:(fun contact -> Format.printf "%a\n" (Format.pp_print_option Format.pp_print_string) contact#address#set_kind#name)
+    response
+    ~f:(fun {name; _} -> Format.printf "%a\n" (Format.pp_print_option Format.pp_print_string) name)
 
 let main = 
   let%map () = req_set_kind () in
