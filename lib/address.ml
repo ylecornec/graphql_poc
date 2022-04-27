@@ -22,7 +22,9 @@ let dummy2 = {
 module Gql =
   struct
     open Graphql_lwt.Schema
-    type out = t option
+
+    type 'a res = 'a option
+    type out = t res
 
     (**
        The type used to build queries, with possible arguments in a type safe way.
@@ -32,55 +34,71 @@ module Gql =
        However `GetAll correspond to a more complex query [GetAll.q] that we can parse the result of into a [GetAll.response] structure.
        In practice we could use the [fields_derivers] mechanism to build the [GetAll] module for this. 
      *)
-    type query =
-      [ `Kind
-      | `Name
-      | `Setkind of ( Kind.t * query)
-      | `GetAll
-      ] list
-
-    (** The GetAll module would make use the fields_derivers mechanism *)
-    module GetAll = struct
-      let q = [`Kind; `Name]
-      type response = {kind: Kind.t option; name : string option}[@@deriving show]
-      let of_json (json: Yojson.Basic.t) =
-        {
-          kind = Kind.Typ.response_of_json (Json.get "kind" json);
-          name = Gql_types.String.response_of_json (Json.get "name" json);
-        }
-    end 
-
-    type response =
-      < kind : Kind.Typ.response;
-      name: string option;
-      set_kind: response;
-      get_all: GetAll.response;
-      >
 
 
-    let kind =
-      Gql_fields.mk_field_zeroary "kind" ~typ:(Kind.Typ.typ) ~resolve:(fun _ t -> Some t.kind)
+    open Gql_types
 
-    let name =
-      Gql_fields.mk_field_zeroary "name" ~typ:string ~resolve:(fun _ t -> Some t.name)
 
-    (** I dont know if this happens in the codebase but in this
-        example, I tried mutual recursion between the graphql [set_kind] field and [typ] object typ.
-     *)
-    let rec set_kind () =
-      (** This list type from [Gql_fields.MyArg] is used as the [arg_list] type from ocaml-graphql-server,
-          but ensures that we provide a [to_string] function for the right type as well. *)
+    (** these types [r], [setkind_args] and [query] must match with the types of the various fields below.
+       In order to generate them, maybe we could require the user to explicitely type these fields and then read this information in a ppx. *)
+
+    type ('kind, 'name, 'setkind) r =
+      {
+       res_kind: 'kind;
+       res_name: 'name;
+       res_setkind: 'setkind;
+      }
+
+    type setkind_args =
+      {arg_kind: Kind.t;
+       arg_ignore: bool;}
+
+    type _ query =
+      | Empty: (unit, unit, unit) r query
+      | Kind: {siblings: (unit, 'name, 'setkind) r query} ->
+              (Kind.Gql.out, 'name, 'setkind) r query
+      | Name: {siblings: ('kind, unit, 'setkind) r query} ->
+              ('kind, string, 'setkind) r query
+      | Setkind: {
+          siblings: ('kind, 'name, unit) r query;
+          arguments: setkind_args;
+          subquery: 'sub query;
+        } -> ('kind, 'name, 'sub res) r query
+
+    (** These fields would be defined manually, or maybe via field_derivers.
+        I wonder if it is possible to use these explicit type annotations to provide information to the ppx.*)
+
+    let kind : (_, string, Kind.Gql.out, no_subquery) Gql_fields.field =
+      Gql_fields.field "kind" ~args:[] ~typ:(Kind.Gql.typ()) ~resolve:(fun _ t -> Some t.kind)
+
+    let name : (_, string, string, no_subquery) Gql_fields.field =
+      Gql_fields.field "name" ~args:[] ~typ:(non_null string) ~resolve:(fun _ t -> t.name)
+
+    (** There can be mutual recursion between the graphql [set_kind] field and [typ] object typ.*)
+
+    let rec set_kind (): 
+              (_, Kind.t -> bool -> string, out, _ query)
+                Gql_fields.field =
+      (** The type of [args] from [Gql_fields.MyArg] is used as the [arg_list] type from ocaml-graphql-server,
+          but we must provide [to_string] functions that will be used to serialize queries as well *)
       let args =
         Gql_fields.MyArg.[
-            Arg.arg "kind" ~typ: (Arg.non_null @@ Kind.Typ.arg_typ ());
-        ]
+            { name = "kind";
+             typ = Arg.non_null @@ Kind.Gql.arg_typ ();
+             to_string = Kind.show;};
+
+            { name = "ignore";
+             typ = Arg.(non_null bool);
+             to_string = string_of_bool;}
+       ]
       in
-      let to_string a = Format.asprintf "setKind(kind:%s)" (Kind.show a) in
-      Gql_fields.mk_field "setKind"
+      Gql_fields.field "setKind"
         ~typ:(typ (): (_, t option) typ)
-        ~resolve:(fun _ (t:t) new_kind -> t.kind <- new_kind; Some t)
+        ~resolve: (fun _ (t:t) new_kind _ignore ->
+          let () = if not _ignore then t.kind <- new_kind in
+          Some t
+        )
         ~args
-        ~to_string
 
     and typ () = 
       obj "Address"
@@ -91,23 +109,38 @@ module Gql =
         ])
 
 
-    (** The object type to parse the response *)
-    let rec response_of_json json = object
-       method kind = Kind.Typ.response_of_json (Json.get kind.name json)
-       method set_kind = response_of_json (Json.get ((set_kind ()).name) json)
-       method name = Gql_types.String.response_of_json (Json.get name.name json)
-       method get_all = GetAll.of_json json
-      end
+    let rec response_of_json: type a. a query -> Yojson.Basic.t -> a res
+      = fun query json ->
+      let rec aux: type a.a query -> Yojson.Basic.t -> a =
+        fun query json ->
+        match query with
+        | Kind {siblings} ->
+           { (aux siblings json) with res_kind = Kind.Gql.response_of_json (Json.get kind.name json) }
+        | Empty -> {res_kind = (); res_name = (); res_setkind = ();}
+        | Name {siblings} ->
+           { (aux siblings json) with res_name = Json.get_string @@ Json.get name.name json }
+        | Setkind {siblings; subquery; _} ->
+           { (aux siblings json) with res_setkind = response_of_json subquery (Json.get (set_kind()).name json) }
+      in
+      match json with
+      | `Null -> None
+      | _ -> Some (aux query json)
 
 
     (** The build_query function generates the query to send to the server.
         For now it outputs a string but it should likely output json and a [variables] json object.*)
 
-    let rec build_field = function
-      | `Kind -> kind.to_string
-      | `Name -> name.to_string
-      | `GetAll -> build_query GetAll.q
-      | `Setkind (arg, q) -> Format.asprintf "%s {%s}" ((set_kind()).to_string arg) (build_query q)
-
-    and build_query (query_list: query) = String.concat " " (List.map build_field query_list)
+    let rec mk_query : type a. a query -> string =
+      function query -> 
+        let rec build_fields : type a. a query -> string list = function
+          | Empty -> []
+          | Kind {siblings; _} -> (kind.to_string)::(build_fields siblings)
+          | Name {siblings; _} -> (name.to_string)::(build_fields siblings)
+          | Setkind {siblings; arguments; subquery;_} ->
+             (Format.asprintf "%s {%s}"
+                ((set_kind()).to_string arguments.arg_kind arguments.arg_ignore) (** arguments are in the same order as they are declared *)
+                (mk_query subquery))::(build_fields siblings)
+        in
+        Stdlib.String.concat " " @@ build_fields query
   end
+

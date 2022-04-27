@@ -4,6 +4,16 @@
    graphql-cohttp
    cohttp-lwt-unix
    cohttp-async
+   graphql_ppx
  )
- (preprocess (pps ppx_deriving.show ppx_jane))
+ (preprocess (pps
+               graphql_ppx
+               ppx_let
+               ppx_custom_printf
+               ppx_here
+               ppx_deriving.show
+               ppx_deriving.fold
+               ppx_deriving.map
+               ppx_fields_conv
+ ))
  (names server client))

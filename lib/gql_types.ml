@@ -9,58 +9,49 @@ module type TYP = sig
   (** [typ] value for the graphql schema *)
   val typ: unit -> (unit, out) typ
 
- (** object type used to parse the response *)
-  type response
-  val response_of_json: Yojson.Basic.t -> response
-
- (** type used to build a query *)
-  type query 
-  val build_query : query -> string
+  type 'a query
+  type 'a res
+  val response_of_json: 'a query -> Yojson.Basic.t -> 'a res
+  val mk_query : 'a query -> string
 end
 
-module Int = struct
-  type query = unit
-  type out = int option
-  type response = int option
-  let typ () = int 
-  let response_of_json = function
-    | `Int i -> Some i
-    | _ -> None
-end
+module Non_null (Aux: sig type new_out type !'a new_res end)
+         (Input: TYP with type out = Aux.new_out option and
+                          type !'a res = 'a Aux.new_res option
+         ): TYP with
+         type out = Aux.new_out and 
+         type 'a query = 'a Input.query and
+         type 'a res = 'a Aux.new_res
 
-module String = struct
-  type query = unit
-  type out = string option
-  type response = string option
-  let typ () = string
-  let response_of_json = function
-    | `String i -> Some i
-    | _ -> None
-end
-
-module Non_null (Aux: sig type new_out type new_response end)
-         (Input: TYP with type out = Aux.new_out option and type response = Aux.new_response option)
   = struct
   type out = Aux.new_out
-  type response = Aux.new_response
-  type query = Input.query
+  type 'a res = 'a Aux.new_res
+  type 'a query = 'a Input.query
   let typ () = non_null @@ Input.typ ()
-  let response_of_json json =
-    match Input.response_of_json json with
+
+  let response_of_json query json =
+    match Input.response_of_json query json with
     | None -> failwith @@ "Non nullable value should not return None "^__LOC__
     | Some v -> v
-  let build_query = Input.build_query
+
+  let mk_query = Input.mk_query
 end
 
-module List (Input: TYP)
+module List (Input: TYP): TYP with
+         type out = Input.out list option and
+         type 'a query = 'a Input.query and
+         type 'a res = 'a Input.res list
   = struct
-  type response = Input.response list
-  type query = Input.query
+  type 'a res = 'a Input.res list
+  type 'a query = 'a Input.query
+  let response_of_json query json =
+    match json with
+    | `List l -> List.map (Input.response_of_json query) l
+    | _ -> failwith @@ Format.asprintf "expecting a json list (%s): but got\n%a\n " __LOC__ Yojson.Basic.pp json
   type out = Input.out list option
   let typ () = list @@ Input.typ ()
-  let response_of_json json = 
-    match json with
-    | `List l -> List.map Input.response_of_json l
-    | _ -> failwith @@ Format.asprintf "expecting a json list (%s): but got\n%a\n " __LOC__ Yojson.Basic.pp json
-  let build_query = Input.build_query
+  let mk_query = Input.mk_query
 end
+
+
+type no_subquery
