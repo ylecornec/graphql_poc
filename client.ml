@@ -9,7 +9,10 @@ open Client_lib
 
 module Req = struct
 
-  (** The query is built using a gadt, so that the return type of the [response_of_json] function below may be dependent on the query value. *)
+  (** The query is built using a gadt, so that the return type of the [response_of_json] function below may be dependent on the query value.
+      Once converted to a string the following query will be :
+      {contacts {address {name kind}}}
+   *)
 
   let query =
     let open Server_schema.Gql in
