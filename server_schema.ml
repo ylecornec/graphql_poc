@@ -1,9 +1,8 @@
-open Graphql_lwt
-open Graphql_lwt.Schema
-
 module Gql =
   struct
+    open Lib.Wrapper.Make(Graphql_lwt.Schema)
     type t = Lib.Contacts.t
+
 
     type src = unit
 
@@ -14,14 +13,13 @@ module Gql =
     type out = unit option
 
     let contacts =
-      Lib.Gql_fields.field
-        "contacts" ~args:[] ~typ:(Lib.Contacts.Gql.typ ()) ~resolve:(fun _ () -> Some Lib.Contacts.dummy)
+      field "contacts" ~args:[] ~typ:(Lib.Contacts.Gql.typ ()) ~resolve:(fun _ () -> Some Lib.Contacts.dummy)
 
-    let typ () = non_null @@ obj "Query" ~fields:(fun _ -> [contacts.field ()])
+    let typ () = non_null @@ obj "Query" ~fields:(fun () -> [contacts])
 
     let mk_query = function
       | Contacts {subquery}  ->
-         Format.sprintf "{%s { %s}}" (contacts.to_string) (Lib.Contact.Gql.mk_query subquery)
+         Format.sprintf "{%s { %s}}" contacts.to_string (Lib.Contact.Gql.mk_query subquery)
 
     let response_of_json query json =
       match query with
@@ -30,7 +28,7 @@ module Gql =
   end
 
 let schema =
-  Schema.(
+  Graphql_lwt.Schema.(
     schema
-    [Gql.contacts.field ()]
+    [Gql.contacts.field]
   )

@@ -43,7 +43,10 @@ module Req_setkind = struct
                        subquery = Setkind {
                                       siblings = Empty;
                                       arguments =
-                                        {arg_kind = Lib.Kind.Kind2; arg_ignore = false} ;
+                                        {arg_kind = Lib.Kind.Kind2;
+                                         arg_ignore = false;
+                                         arg_obj = {Lib.Obj_arg.a = "a"; b = "b string value"; c = 3 }
+                                        } ;
                                       subquery = Name {siblings = Kind {siblings = Empty}}}}}
 
 

@@ -16,9 +16,8 @@ let dummy2 = {
     address = Address.dummy2;
   }
 
-open Graphql_lwt.Schema
-
 module Gql = struct
+  open Wrapper.Make(Graphql_lwt.Schema)
   type ('address, 'name, 'id) r =
     {
       res_address: 'address;
@@ -45,17 +44,11 @@ module Gql = struct
 
   type out = t option
 
-  let address =
-    Gql_fields.field "address"
-      ~args:[] ~typ:(Address.Gql.typ ()) ~resolve:(fun _ t -> Some t.address)
+  let address = field "address" ~args:[] ~typ:(Address.Gql.typ ()) ~resolve:(fun _ t -> Some t.address)
 
-  let name =
-    Gql_fields.field "name"
-      ~args:[] ~typ:(Graphql_lwt.Schema.string) ~resolve:(fun _ t -> Some t.name)
+  let name = field "name" ~args:[] ~typ:(Graphql_lwt.Schema.string) ~resolve:(fun _ (t:t) -> Some t.name)
 
-  let id =
-    Gql_fields.field
-      "id" ~args:[] ~typ:(Graphql_lwt.Schema.int) ~resolve:(fun _ t -> Some t.id)
+  let id = field "id" ~args:[] ~typ:(Graphql_lwt.Schema.int) ~resolve:(fun _ t -> Some t.id)
 
   let response_of_json: type a. a query -> Yojson.Basic.t -> a res =
     fun query json ->
@@ -84,11 +77,6 @@ module Gql = struct
   let mk_query q = Stdlib.String.concat " " (fields_to_string q)
 
   let typ (): (unit, out) typ = 
-    obj "Contact"
-      ~fields:(fun _ -> [
-                   address.field ();
-                   name.field ();
-                   id.field ();
-      ])
+    obj "Contact" ~fields:(fun _ -> [address; name; id])
 
 end

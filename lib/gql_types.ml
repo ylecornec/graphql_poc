@@ -19,7 +19,7 @@ module Non_null (Aux: sig type new_out type !'a new_res end)
          (Input: TYP with type out = Aux.new_out option and
                           type !'a res = 'a Aux.new_res option
          ): TYP with
-         type out = Aux.new_out and 
+         type out = Aux.new_out and
          type 'a query = 'a Input.query and
          type 'a res = 'a Aux.new_res
 
