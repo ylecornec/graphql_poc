@@ -42,7 +42,8 @@ module Gql =
     type setkind_args =
       {arg_kind: Kind.t;
        arg_ignore: bool;
-       arg_obj: Obj_arg.t;
+       arg_obj: Obj_arg.t option;
+       arg_with_default: bool option; (** If arg_with_default is None, the default value will be used *)
       }
 
     (**
@@ -62,30 +63,32 @@ module Gql =
           subquery: 'sub query;
         } -> ('kind, 'name, 'sub res) r query
 
-    let kind : (_,_ , string, Kind.Gql.out, no_subquery) field =
+    let kind : (_,_ , string, Kind.Gql.out, no_subquery) Fields.field =
       field "kind" ~args:[] ~typ:(Kind.Gql.typ()) ~resolve:(fun _ t -> Some t.kind)
 
-    let name : (_,_, string, string, no_subquery) field =
+    let name : (_,_, string, string, no_subquery) Fields.field =
       field "name" ~args:[] ~typ:(non_null string) ~resolve:(fun _ (t:t) -> t.name)
 
     (** There can be mutual recursion between the graphql [set_kind] field and [typ] object typ.*)
 
-    let rec set_kind () : (unit, t, Kind.t -> bool -> Obj_arg.t -> string, t res, 'a) field =
+    let rec set_kind () : (unit, t, Kind.t -> bool -> Obj_arg.t option -> bool option -> string, t res, 'a) Fields.field =
       let args =
         Arg.[
             arg "kind" ~typ:(non_null @@ Kind.Gql.arg_typ ());
             arg "ignore" ~typ:(non_null bool);
             arg "obj_arg" ~typ:(Obj_arg.arg_typ());
+            arg' "arg_with_default" ~typ:bool ~doc:"testing default values in wrapper" ~default:true;
        ]
       in
       field "setKind"
         ~typ:(typ (): (_, t option) typ)
-        ~resolve: (fun _ (t:t) new_kind _ignore obj_arg ->
+        ~resolve: (fun _ (t:t) new_kind _ignore obj_arg arg_with_default ->
           let () =
             match obj_arg with
             | Some (Ok obj_arg) -> Format.printf "resolving setking obj_arg = %a\n" Obj_arg.pp obj_arg
             | _ -> Format.printf "obj_arg failure\n"
           in
+          let () = Format.printf "resolving setking arg_with_default = %b\n" arg_with_default in
           let () = Format.print_flush () in
           let () = if not _ignore then t.kind <- new_kind in
           Some t
@@ -123,7 +126,7 @@ module Gql =
           | Name {siblings; _} -> name.to_string::(build_fields siblings)
           | Setkind {siblings; arguments; subquery;_} ->
              (Format.asprintf "%s {%s}"
-                ((set_kind()).to_string arguments.arg_kind arguments.arg_ignore arguments.arg_obj) (** arguments are in the same order as they are declared *)
+                ((set_kind()).to_string arguments.arg_kind arguments.arg_ignore arguments.arg_obj arguments.arg_with_default) (** arguments are in the same order as they are declared *)
                 (mk_query subquery))::(build_fields siblings)
         in
         Stdlib.String.concat " " @@ build_fields query

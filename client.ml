@@ -30,7 +30,7 @@ module Req = struct
   type result = contact option list Server_schema.Gql.res
 
   let result json =
-    Server_schema.Gql.response_of_json query json
+   Server_schema.Gql.response_of_json query json
 
 end
 
@@ -45,7 +45,8 @@ module Req_setkind = struct
                                       arguments =
                                         {arg_kind = Lib.Kind.Kind2;
                                          arg_ignore = false;
-                                         arg_obj = {Lib.Obj_arg.a = "a"; b = "b string value"; c = 3 }
+                                         arg_obj = Some {Lib.Obj_arg.a = "a"; b = "b string value"; c = 3 };
+                                         arg_with_default = None;
                                         } ;
                                       subquery = Name {siblings = Kind {siblings = Empty}}}}}
 
