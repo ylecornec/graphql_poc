@@ -145,9 +145,31 @@ module Make (Schema : Graphql_intf.Schema) = struct
                     Format.fprintf fmt "%s" (typ.to_string s))))
       }
 
-    let enum ?doc name ~values ~to_string =
-      { typ = Schema.Arg.enum ?doc name ~values;
-        to_string = Json.string_of_option to_string}
+    type 'a enum_value =
+      {
+        as_string: string;
+        value: 'a;
+        enum_value: 'a Schema.enum_value
+      }
+
+    let enum_value ?doc ?deprecated as_string ~value =
+      {
+        as_string;
+        value;
+        enum_value = Schema.enum_value ?doc ?deprecated as_string ~value;
+      }
+
+    let enum ?doc name ~(values:_ enum_value list) =
+      let rec to_string (values: _ enum_value list ) v = match values with
+        | {as_string; value; _}::_ when value = v -> as_string
+        | _::q -> to_string q v
+        | _ -> failwith @@ Format.asprintf "Could not convert GraphQL query argument to string for enum type <%s>. Was this argument declared via an enum_value ?" name
+      in
+      let ocaml_graphql_server_values = 
+        (List.map (function {enum_value; _} -> enum_value) values)
+      in
+      { typ = Schema.Arg.enum ?doc name ~values:ocaml_graphql_server_values;
+        to_string = Json.string_of_option (to_string values)}
 
     let arg ?doc name ~typ = Arg { name; typ; doc }
 
@@ -248,7 +270,6 @@ module Make (Schema : Graphql_intf.Schema) = struct
   let int = Schema.int
 
   let enum_value = Schema.enum_value
-
   type ('a, 'b) typ = ('a, 'b) Schema.typ
 end
 

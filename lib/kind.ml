@@ -1,4 +1,4 @@
-type t = Kind1 | Kind2 [@@deriving show {with_path = false}, yojson]
+type t = Kind1 | Kind2 | Kind3 [@@deriving show {with_path = false}, yojson]
 
 module Gql = struct
   open Wrapper.Make(Graphql_lwt.Schema)
@@ -10,9 +10,9 @@ module Gql = struct
       ~values: [ enum_value "Kind1" ~value:Kind1; enum_value "Kind2" ~value:Kind2]
 
   let arg_typ () =
-    Arg.enum "Kind"
+    let open Arg in
+    enum "Kind"
       ~values: [ enum_value "Kind1" ~value:Kind1; enum_value "Kind2" ~value:Kind2]
-      ~to_string: show
 
   type response = t option
 
