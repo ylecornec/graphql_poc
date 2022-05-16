@@ -95,13 +95,28 @@ module Make (Schema : Graphql_intf.Schema) = struct
     let mk_query = Input.mk_query
   end
 
-module List (Input: TYP): TYP with
-         type out = Input.out list option and
-         type 'a query = 'a Input.query and
-         type 'a res = 'a Input.res list
-  = struct
-  type 'a res = 'a Input.res list
-  type 'a query = 'a Input.query
+  module ListScalar (Input : SCALAR) = struct
+    type 'a final_option_modifier = 'a
+
+    type 'a modifier = 'a Input.modifier Input.final_option_modifier list
+
+    type out_before_modifiers = Input.out_before_modifiers
+
+    type out = out_before_modifiers modifier final_option_modifier
+
+    let response_of_json json =
+      match json with
+      | `List l ->
+         Stdlib.List.map Input.response_of_json l
+      | _ ->
+         Json.fail_parsing "list" json
+
+    let typ_nullable () = list (Input.typ ())
+
+    let typ () = non_null @@ typ_nullable ()
+
+  end
+  module List (Input : MAYBE_NULLABLE_TYP) = struct
     type 'a final_option_modifier = 'a
 
     type 'a modifier = 'a Input.modifier Input.final_option_modifier list

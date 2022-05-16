@@ -2,4 +2,6 @@ type t = Contact.t list
 
 let dummy = [Some Contact.dummy1; Some Contact.dummy2]
 
-module Gql = (Gql_types.List(Contact.Gql))
+
+open Gql_types.Make(Graphql_lwt.Schema)
+module Gql = Nullable(List(Contact.Gql))

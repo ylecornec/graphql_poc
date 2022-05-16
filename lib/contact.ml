@@ -33,7 +33,7 @@ module Gql = struct
       {siblings: (unit, 'name, 'id) r query;
        subquery: 'a Address.Gql.query;
       } -> 
-      ('a Address.Gql.res, 'name, 'id) r query
+      ('a Address.Gql.modifier Address.Gql.final_option_modifier, 'name, 'id) r query
   | Name:
       {siblings : ('address, unit, 'id) r query;} ->
       ('address, string, 'id) r query
@@ -42,9 +42,15 @@ module Gql = struct
         ('address, 'name, int) r query
 
 
-  type out = t option
+  (* type out = t option *)
+  type out_before_modifiers = t
+  type 'a modifier = 'a
+  type 'a final_option_modifier = 'a option
+  type out = out_before_modifiers modifier final_option_modifier
 
-  let address = field "address" ~args:[] ~typ:(Address.Gql.typ ()) ~resolve:(fun _ t -> Some t.address)
+  open Gql_types.Make(Graphql_lwt.Schema)
+  module Nullable_address = Nullable(Address.Gql)
+  let address = field "address" ~args:[] ~typ:(Nullable_address.typ ()) ~resolve:(fun _ t -> Some t.address)
 
   let name = field "name" ~args:[] ~typ:(Graphql_lwt.Schema.string) ~resolve:(fun _ (t:t) -> Some t.name)
 
@@ -57,9 +63,9 @@ module Gql = struct
       match query with
       | Empty -> {res_address = (); res_id =  (); res_name = ();}
       | Name {siblings} ->
-         { (aux siblings json) with res_name = Json.get_string @@ Json.get name.name json }
+         { (aux siblings json) with res_name = Gql_string.response_of_json @@ Json.get name.name json }
       | Id {siblings} ->
-         { (aux siblings json) with res_id = Json.get_int @@ Json.get id.name json }
+         { (aux siblings json) with res_id = Gql_int.response_of_json @@ Json.get id.name json }
       | Address {siblings; subquery} ->
          { (aux siblings json) with res_address = Address.Gql.response_of_json subquery @@ Json.get address.name json }
     in
@@ -76,7 +82,7 @@ module Gql = struct
 
   let mk_query q = Stdlib.String.concat " " (fields_to_string q)
 
-  let typ (): (unit, out) typ = 
+  let typ (): (unit, out_before_modifiers modifier final_option_modifier) typ = 
     obj "Contact" ~fields:(fun _ -> [address; name; id])
 
 end

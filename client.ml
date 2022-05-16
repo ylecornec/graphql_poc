@@ -25,8 +25,9 @@ module Req = struct
      The [response_of_json] below returns a record which type depend on the query.
      It might be convenient to define aliases to this type (with the help of merlin) to help bring the fields of this record into scope. See the [print_contact_name] function below.
    *)
-  type contact = ((Lib.Kind.Gql.out, string, unit) Lib.Address.Gql.r option, unit, unit)
-                   Lib.Contact.Gql.r
+  type contact = ((Lib.Kind.Gql.out, string, unit, unit) Lib.Address.Gql.r, unit, unit)
+Lib.Contact.Gql.r
+
   type result = contact option list Server_schema.Gql.res
 
   let result json =
@@ -48,12 +49,11 @@ module Req_setkind = struct
                                          arg_obj = Some {Lib.Obj_arg.a = "a"; b = "b string value"; c = 3 };
                                          arg_with_default = None;
                                         } ;
-                                      subquery = Name {siblings = Kind {siblings = Empty}}}}}
+                                      subquery = Name {siblings = Kind {siblings = Kinds {siblings = Empty}}}}}}
 
 
-  type contact = ((unit, unit, (Lib.Kind.Gql.out, string, unit) Lib.Address.Gql.r option)
-                    Lib.Address.Gql.r option,
-                  unit, unit) Lib.Contact.Gql.r
+ type contact = ((unit, unit, (Lib.Kind.Gql.out, string, unit, Lib.Address.Gql.Gql_kinds.out) Lib.Address.Gql.r, unit) Lib.Address.Gql.r, unit, unit) Lib.Contact.Gql.r option
+
 
 let result= 
   function json ->
@@ -63,7 +63,7 @@ let result=
 end
 
 let [@warning "-8"] req_setkind () =
-  let%map res =
+  (let%map res =
     Client.query_exn
       (object
          method query =
@@ -75,13 +75,14 @@ let [@warning "-8"] req_setkind () =
        end)
       (Uri.of_string "http://localhost:8080/graphql")
   in
+  let (Some contacts) = res.contacts in
   Stdlib.List.iter
-    (function Some (contact: Req_setkind.contact) ->
-               let Some address = contact.res_address in
-               let Some address = address.res_setkind in
-               Format.printf "name=%s,kind=%a\n" address.res_name (Format.pp_print_option Lib.Kind.pp) address.res_kind
-    )
-    res.contacts
+      (function (Some contact: Req_setkind.contact) ->
+      let address = contact.res_address in
+      let address = address.res_setkind in
+      Format.printf "name=%s,kind=%a\n" address.Lib.Address.Gql.res_name Lib.Kind.pp address.Lib.Address.Gql.res_kind)
+   contacts
+  )
 
 let [@warning "-8-27"] req () =
   let%map res =
@@ -96,13 +97,13 @@ let [@warning "-8-27"] req () =
        end)
       (Uri.of_string "http://localhost:8080/graphql")
   in
-  let print_contact_name (contact:Req.contact) = 
-      let Some address = contact.res_address in
+  let print_contact_name (contact : Req.contact) = 
+      let address = contact.res_address in
       let name = address.res_name in
-      Format.printf "name=%s, kind=%a\n" name (Format.pp_print_option Lib.Kind.pp) address.res_kind
+      Format.printf "name=%s, kind=%a\n" name Lib.Kind.pp address.res_kind
   in
-  Stdlib.List.iter
-    (function Some contact -> print_contact_name contact)
+  Option.iter (Stdlib.List.iter
+    (function Some contact -> print_contact_name contact))
     res.contacts
 
 let main = 
