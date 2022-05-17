@@ -49,7 +49,7 @@ module Gql = struct
   type out = out_before_modifiers modifier final_option_modifier
 
   open Gql_types.Make(Graphql_lwt.Schema)
-  module Nullable_address = Nullable(Address.Gql)
+  module Nullable_address = NullableTyp(Address.Gql)
   let address = field "address" ~args:[] ~typ:(Nullable_address.typ ()) ~resolve:(fun _ t -> Some t.address)
 
   let name = field "name" ~args:[] ~typ:(Graphql_lwt.Schema.string) ~resolve:(fun _ (t:t) -> Some t.name)
